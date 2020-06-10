@@ -11,8 +11,8 @@ const { Expo } = require("expo-server-sdk");
 var CronJob = require("cron").CronJob;
 // var tfidf = require("tfidf");
 var job = new CronJob(
-  "0 * * * * *",
-  // "0 0 9,21 * * *",
+  // "0 * * * * *",
+  "0 0 9,21 * * *",
   // "0 * * * * *",
   function () {
     push_notification();
@@ -605,7 +605,7 @@ app.get("/getPharmacies", (req, res, next) => {
 
 const push_notification = () => {
   conn.query(
-    "SELECT DISTINCT(notification_token) FROM `user` WHERE notification_token is not null",
+    "SELECT DISTINCT(notification_token) FROM `users` WHERE notification_token is not null",
     (err, result, fields) => {
       conn.on("error", () => {
         console.log("[MySQL error]", err);
@@ -617,7 +617,7 @@ const push_notification = () => {
       // Create the messages that you want to send to clents
       let messages = [];
       console.log(result);
-      if (result) {
+      if (result && result.length) {
         let somePushTokens = result.map((item) => {
           return item.notification_token;
         });

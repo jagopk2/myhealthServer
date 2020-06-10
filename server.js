@@ -11,7 +11,8 @@ const { Expo } = require("expo-server-sdk");
 var CronJob = require("cron").CronJob;
 // var tfidf = require("tfidf");
 var job = new CronJob(
-  "0 0 9,21 * * *",
+  "0 * * * * *",
+  // "0 0 9,21 * * *",
   // "0 * * * * *",
   function () {
     push_notification();
@@ -337,7 +338,86 @@ app.post("/uploadImageReport", (req, res, next) => {
     }
   );
 });
+app.post("/uploadPrescription", (req, res, next) => {
+  const { photo } = req.files;
+  const { id, type } = req.body;
+  console.log(req.files);
+  // console.log(type);
+  // console.log(photo);
+  // console.log(req.files);
+  // console.log(req.body.reportName);
+  user_id = id;
+  // console.log(req.files);
+  // console.log(req.files["images"].path);
+  var img = fs.readFileSync(photo.path);
+  // console.log(typeof img.toString());
+  // console.log(img.toString("base64"));
 
+  var report = {
+    reportId: "",
+    reportImage: "",
+    reportDate: "",
+  };
+
+  conn.query(
+    "INSERT INTO `doctor_prescription`(`user_id`, `img`) VALUES (?,?)",
+    [user_id, img],
+    (err, result) => {
+      conn.on("error", () => {
+        res.send(JSON.stringify(err));
+      });
+      conn.query(
+        "SELECT * FROM `doctor_prescription` ORDER BY user_id desc LIMIT 1",
+        (err, result) => {
+          conn.on("error", () => {
+            res.send(JSON.stringify(err));
+          });
+
+          console.log(typeof result);
+          console.log(result[0].user_id);
+          var buffer = Buffer.from(result[0].img, "binary");
+          report.reportImage = buffer.toString("base64");
+          report.reportId = result[0].id;
+
+          //         console.log(report);
+          res.send(JSON.stringify(report));
+        }
+      );
+    }
+  );
+});
+
+app.get("/getPrescriptions", (req, res, next) => {
+  var report = {
+    reportId: "",
+    reportImage: "",
+  };
+  var user_id = querystring.parse(req.url)["/getPrescriptions?id"];
+  conn.query(
+    "select * from `doctor_prescription` where user_id = ?",
+    [user_id],
+    (err, result, fields) => {
+      conn.on("error", () => {
+        console.log("[MySQL error]", err);
+      });
+
+      //var buffer = Buffer.from(result[0].img,'binary');
+
+      //  console.log(buffer.toString('base64'));
+      result.forEach((element) => {
+        var buffer = Buffer.from(element.img, "binary");
+        element.img = buffer.toString("base64");
+        //console.log("in loop");
+      });
+
+      if (result.length === 0) {
+        res.send("noData");
+      } else {
+        res.send(JSON.stringify(result));
+      }
+    }
+  );
+});
 app.get("/getReports", (req, res, next) => {
   var report = {
     reportId: "",
@@ -536,54 +616,59 @@ const push_notification = () => {
 
       // Create the messages that you want to send to clents
       let messages = [];
-      let somePushTokens = result.map((item) => {
-        return item.notification_token;
-      });
-      for (let pushToken of somePushTokens) {
-        // Each push token looks like ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]
-
-        // Check that all your push tokens appear to be valid Expo push tokens
-        if (!Expo.isExpoPushToken(pushToken)) {
-          console.error(
-            `Push token ${pushToken} is not a valid Expo push token`
-          );
-          continue;
-        }
-
-        // Construct a message (see https://docs.expo.io/versions/latest/guides/push-notifications)
-        messages.push({
-          to: pushToken,
-          sound: "default",
-          body: "Kindly enter your daily vital readings",
-          priority: "high",
-          channelId: "healthApp-messages",
+      console.log(result);
+      if (result) {
+        let somePushTokens = result.map((item) => {
+          return item.notification_token;
         });
-      }
+        for (let pushToken of somePushTokens) {
+          // Each push token looks like ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]
 
-      // The Expo push notification service accepts batches of notifications so
-      // that you don't need to send 1000 requests to send 1000 notifications. We
-      // recommend you batch your notifications to reduce the number of requests
-      // and to compress them (notifications with similar content will get
-      // compressed).
-      let chunks = expo.chunkPushNotifications(messages);
-      let tickets = [];
-      (async () => {
-        // Send the chunks to the Expo push notification service. There are
-        // different strategies you could use. A simple one is to send one chunk at a
-        // time, which nicely spreads the load out over time:
-        for (let chunk of chunks) {
-          try {
-            let ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-            tickets.push(...ticketChunk);
-            // NOTE: If a ticket contains an error code in ticket.details.error, you
-            // must handle it appropriately. The error codes are listed in the Expo
-            // documentation:
-            // https://docs.expo.io/versions/latest/guides/push-notifications#response-format
-          } catch (error) {
-            console.error(error);
+          // Check that all your push tokens appear to be valid Expo push tokens
+          if (!Expo.isExpoPushToken(pushToken)) {
+            console.error(
+              `Push token ${pushToken} is not a valid Expo push token`
+            );
+            continue;
           }
+
+          // Construct a message (see https://docs.expo.io/versions/latest/guides/push-notifications)
+          messages.push({
+            to: pushToken,
+            sound: "default",
+            body: "Kindly enter your daily vital readings",
+            priority: "high",
+            channelId: "healthApp-messages",
+          });
         }
-      })();
+
+        // The Expo push notification service accepts batches of notifications so
+        // that you don't need to send 1000 requests to send 1000 notifications. We
+        // recommend you batch your notifications to reduce the number of requests
+        // and to compress them (notifications with similar content will get
+        // compressed).
+        let chunks = expo.chunkPushNotifications(messages);
+        let tickets = [];
+        (async () => {
+          // Send the chunks to the Expo push notification service. There are
+          // different strategies you could use. A simple one is to send one chunk at a
+          // time, which nicely spreads the load out over time:
+          for (let chunk of chunks) {
+            try {
+              let ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+              tickets.push(...ticketChunk);
+              // NOTE: If a ticket contains an error code in ticket.details.error, you
+              // must handle it appropriately. The error codes are listed in the Expo
+              // documentation:
+              // https://docs.expo.io/versions/latest/guides/push-notifications#response-format
+            } catch (error) {
+              console.error(error);
+            }
+          }
+        })();
+      } else {
+        console.log("No Notification Token of User");
+      }
     }
   );
 };
